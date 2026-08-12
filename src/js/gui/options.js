@@ -13,6 +13,22 @@ const PlanarLaplace = require('../common/laplace');
 const geocoderKey = '5b3ce3597851110001cf6248dc55f0492abe4923aa33f4ca1722acb8';
 const geocoderUrl = 'https://api.openrouteservice.org/geocode';
 
+// pelias-leaflet-plugin's highlight() inserts feature.properties.label (untrusted data
+// coming from the geocoding API) into the results list via innerHTML without escaping it -
+// it only wraps the matched substring in <strong>. We override it here to escape the text
+// first, so a malicious place name from the geocoding service can't inject HTML/script into
+// this (privileged, moz-extension://) page.
+function escapeHtml(str) {
+	return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function escapeRegExp(str) {
+	return String(str).replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&');
+}
+L.Control.Geocoder.prototype.highlight = function(text, focus) {
+	var r = RegExp('(' + escapeRegExp(focus) + ')', 'gi');
+	return escapeHtml(text).replace(r, '<strong>$1</strong>');
+};
+
 var levelMap, fixedPosMap;
 var epsilon;
 var activeLevel = "medium";
@@ -188,7 +204,8 @@ function initLevelMap() {
 		L.control.geocoder(geocoderKey, {
         	url: geocoderUrl,
 			markers: false,
-			autocomplete: false
+			autocomplete: false,
+			focus: false,		// don't leak the map's current center (may be the user's real location) to the geocoder
 		}).on('highlight', handleChangePosEvent)
 		  .on('select',    handleChangePosEvent)
 		  .addTo(levelMap);
@@ -254,7 +271,8 @@ async function initFixedPosMap() {
 		L.control.geocoder(geocoderKey, {
 			url: geocoderUrl,
 			markers: false,
-			autocomplete: false
+			autocomplete: false,
+			focus: false,		// don't leak the map's current center (may be the user's real location) to the geocoder
 		}).on('results', function(e) {
 			// directly set position if the text is a latlon
 			var res = e.params.text.match(/^([-+]?[0-9]+\.[0-9]+)\s*,?\s*([-+]?[0-9]+\.[0-9]+)$/);
