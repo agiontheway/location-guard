@@ -15,6 +15,24 @@ Util.events.addListener('browser.install', function() {
 
 Browser.init('main');
 
+// OpenStreetMap's tile servers reject requests that don't carry a Referer (or a
+// distinctive User-Agent) identifying the calling application - see
+// https://wiki.openstreetmap.org/wiki/Blocked_tiles . Extension pages don't send a
+// Referer by default (e.g. Firefox strips it for moz-extension:// origins), so we
+// add one explicitly, only for requests going to the OSM tile servers.
+//
+if(browser.webRequest && browser.webRequest.onBeforeSendHeaders) {
+	browser.webRequest.onBeforeSendHeaders.addListener(
+		function(details) {
+			const headers = details.requestHeaders.filter(h => h.name.toLowerCase() != 'referer');
+			headers.push({ name: 'Referer', value: 'https://github.com/chatziko/location-guard' });
+			return { requestHeaders: headers };
+		},
+		{ urls: ['*://*.tile.openstreetmap.org/*', '*://*.tile.openstreetmap.de/*'] },
+		['blocking', 'requestHeaders']
+	);
+}
+
 // this is used from the content-script of an iframe, to communicate with the content-script
 // of the top-window. We just echo the call back to the tab.
 //

@@ -22,7 +22,7 @@
 	},
 #endif
 
-	"permissions": ["http://*/*", "https://*/*", "storage"],
+	"permissions": ["http://*/*", "https://*/*", "storage", "webRequest", "webRequestBlocking"],
 	"manifest_version": 2,
 
 	"background": {
