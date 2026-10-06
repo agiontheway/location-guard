@@ -1,3 +1,66 @@
+# Why does this fork exist?
+The original code by a (comparatively) trusted source Kostas Chatzikokolakis (a trusted repo since 2016) is now effectively broken due to OpenStreeMaps blocking the plugin. Fair enough if it's against their TOS. Another user https://github.com/DrewHood/location-guard forked and solved.
+
+## What did the original extension do?
+It would allow the browser to lie to a website about it's actual location, you could do this for all websites with varying degrees of 'blur' around your actual location without giving it away, OR you could get it to lie to a specific website and give that specific website a false pinned location for you. Cool stuff for privacy, research, or handling how nosy websites change what they show you based on what your location is perceived to be. (Very neat when combined with a VPN that exits near where you pin the browser to).
+
+
+## Why bother doing this?
+
+You shouldn't run code off the internet without checking it first, or getting an agent to do it. Opus 5.5 did a code-review of Drew's work and confirmed no malicious changes or obfuscated code. Good enough for me anyways.
+
+So, credit to Kostas, and Drew for doing all the hard work, and thanks to you Claude (I guess) for telling us that it's not a crazy thing to do to run this on your browser. (Full Claude output pasted below for you dear reader if you want to check what it says, or just ask another agent to check again.)
+
+## Opus 5.5 opinion of the fork
+__
+I found nothing malicious in the fork. It's two small commits on top of the latest upstream `chatziko/location-guard`, and the changes do what their messages say. The extension builds and runs in Firefox, and all 16 location tests passed. It won't run in modern Chrome browsers (version 154+), because that version no longer supports this kind of extension (Manifest V2).
+
+## 1. Commit review
+
+**Provenance:** GitHub lists the repo as a fork of `chatziko/location-guard`. It branches from upstream's latest commit (`56fc372`, Apr 2022) and has no upstream commits missing. Its only branch is `master`, with no tags and no releases, so there are no prebuilt binaries to worry about.
+
+| Commit | What it changes | Verdict |
+| --- | --- | --- |
+| `334963c` Fix OSM tile blocking and build errors | Makefile path fixes; lockfile converted to the newer format; adds a `Referer` header to OpenStreetMap map-tile requests; adds the `webRequest` and `webRequestBlocking` permissions | Benign |
+| `d299683` Escape input to geocoder | Fixes an injection bug in the place-name search on the settings page; also stops the map's centre (which may be your real location) being sent to the geocoding service | Benign, and improves privacy |
+
+- **Lockfile:** I compared it entry by entry against upstream's. It's the same 189 packages with identical versions, download URLs and integrity hashes. All of them come from `registry.npmjs.org`, there are no install scripts, and `package.json` is unchanged.
+- **The new header code** (`src/js/main.js:24-34`) only fires for `*.tile.openstreetmap.org` and `.de`. It replaces the `Referer` with a fixed GitHub URL and never reads or sends any page data.
+- **The new permissions** sound powerful, but the extension already had access to every site, and this code uses them only for that one header.
+- **The search fix:** I checked it against the original plugin function in `node_modules`. It's identical except that it escapes HTML first, and a unit test confirmed a `<img onerror=…>` payload comes out harmless.
+- **No new network calls:** I found no new external addresses, data collection or obfuscated code. The geocoder API key was already in upstream.
+
+**Minor issues, none of them malicious:**
+
+- The header change applies to OSM tile requests from *every* website you visit, not just the extension's own pages. It labels them with upstream's GitHub URL. That's harmless, and arguably leaks less than the normal header would, but it could be limited to the extension's own requests.
+- **Bug:** `make package-firefox` is broken in this fork. The Makefile change makes it output a folder instead of an `.xpi` file. Zipping `build/firefox/` by hand works around it.
+- `npm ci` reports audit warnings. They come from the dependencies upstream already uses, which this fork didn't change.
+
+To build from the pinned version:
+
+```bash
+git clone --branch reviewed-2026-10-06 https://github.com/agiontheway/location-guard.git
+cd location-guard && npm ci --ignore-scripts && make build-firefox
+(cd build/firefox && zip -qr ../location-guard.xpi .)   # make package-firefox is broken in this fork
+```
+
+## Installing in Firefox without addons.mozilla.org
+
+You're on standard release Firefox (156+, `release` channel). Release Firefox only permanently installs add-ons that Mozilla has signed, and you can't switch that off there. Without Mozilla's signing service you have two choices:
+
+1. **Temporary install (works on your current Firefox).** Go to `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…**, and pick `build/firefox/manifest.json` or the `.xpi`. It's removed whenever Firefox restarts, so it suits testing, not daily use.
+2. **Permanent install (needs a different Firefox build).** Use Firefox ESR, Developer Edition or Nightly, which can turn signature checks off:
+
+   - Set `xpinstall.signatures.required` to `false` in `about:config`.
+   - Open `about:addons`, click the gear icon, then **Install Add-on From File…**, and pick the `.xpi`.
+
+**One thing to fix before a permanent install:** the extension uses the same add-on ID as the official Location Guard on addons.mozilla.org (`jid1-HdwPLukcGQeOSh@jetpack`, set in `src/manifest.json`). Firefox checks addons.mozilla.org for updates by that ID, so it could replace your pinned build with the official one, which defeats the pin. There are two ways to avoid it:
+
+- Change the ID to one you own (for example `location-guard@agiontheway`) in your fork, and tag that as the version to install. This is the cleaner option.
+- Or, after installing, open the add-on in `about:addons` and set **Allow automatic updates** to **Off**.
+
+
+
 # Location Guard
 
 **Location Guard** is a browser extension that allows to protect your location
